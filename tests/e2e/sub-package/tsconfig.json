@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+    "lib": ["ES2022"],
+    "target": "ES2022",
+    "module": "ES2022",
+    "sourceMap": false,
+    "moduleResolution": "node",
+    "isolatedModules": true,
+    "strict": true,
+    "composite": true,
+    "incremental": true
+  },
+	"include": ["index.ts"]
+}

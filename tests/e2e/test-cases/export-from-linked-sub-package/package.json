@@ -1,0 +1,6 @@
+{
+  "name": "parent-package",
+  "version": "0.0.0",
+  "types": "./input.ts",
+  "main": "./input.ts"
+}
