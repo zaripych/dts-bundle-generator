@@ -41,12 +41,38 @@ export function compileDts(rootFiles: readonly string[], preferredConfigPath?: s
 	host.resolveModuleNames = (moduleNames: string[], containingFile: string) => {
 		return moduleNames.map((moduleName: string) => {
 			const resolvedModule = ts.resolveModuleName(moduleName, containingFile, compilerOptions, host).resolvedModule;
-			if (resolvedModule && !resolvedModule.isExternalLibraryImport && resolvedModule.extension !== ts.Extension.Dts) {
-				resolvedModule.extension = ts.Extension.Dts;
 
-				verboseLog(`Change module from .ts to .d.ts: ${resolvedModule.resolvedFileName}`);
+			if (resolvedModule && !resolvedModule.isExternalLibraryImport) {
+				const resolvedDtsFileName = changeExtensionToDts(
+					resolvedModule.resolvedFileName
+				);
 
-				resolvedModule.resolvedFileName = changeExtensionToDts(resolvedModule.resolvedFileName);
+				if (resolvedModule.extension !== ts.Extension.Dts) {
+					resolvedModule.extension = ts.Extension.Dts;
+
+					verboseLog(
+						`Change module from .ts to .d.ts: ${resolvedModule.resolvedFileName}`
+					);
+
+					resolvedModule.resolvedFileName = resolvedDtsFileName;
+				}
+
+				if (!dtsFiles.has(resolvedDtsFileName) && !containingFile.endsWith('.d.ts')) {
+					verboseLog(
+						`Generating declarations from ${containingFile} because ${resolvedDtsFileName} is not in the .d.ts cache`
+					);
+					const extraDtsFiles = getDeclarationFiles(
+						[containingFile],
+						compilerOptions
+					);
+					const entries = Array.from(extraDtsFiles.entries());
+					for (let i = 0; i < entries.length; i += 1) {
+						const [key, value] = entries[i];
+						if (!dtsFiles.has(key)) {
+							dtsFiles.set(key, value);
+						}
+					}
+				}
 			}
 
 			return resolvedModule as ts.ResolvedModule;
