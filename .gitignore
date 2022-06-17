@@ -10,3 +10,5 @@ package-lock.json.*
 
 *.tsbuildinfo
 config-schema.d.ts
+
+.turbo
