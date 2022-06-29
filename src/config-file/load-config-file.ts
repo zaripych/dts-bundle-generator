@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { errorLog } from '../logger';
+import { errorLog, verboseLog } from '../logger';
 import { EntryPointConfig, CompilationOptions } from '../bundle-generator';
 import { getAbsolutePath } from '../helpers/get-absolute-path';
 import { checkSchemaMatch, SchemeDescriptor, schemaPrimitiveValues } from './check-schema-match';
@@ -23,24 +23,21 @@ export interface BundlerConfig {
 	compilationOptions?: CompilationOptions;
 }
 
-/**
- * @internal Do not output this function in generated dts for the npm package
- */
-export function loadConfigFile(configPath: string): BundlerConfig {
-	// eslint-disable-next-line @typescript-eslint/no-var-requires
-	const possibleConfig = require(getAbsolutePath(configPath));
-
+function validateConfig(possibleConfig: unknown, configPath?: string) {
 	const errors: string[] = [];
 	if (!checkSchemaMatch(possibleConfig, configScheme, errors)) {
 		errorLog(errors.join('\n'));
 		throw new Error('Cannot parse config file');
 	}
 
-	if (!Array.isArray(possibleConfig.entries) || possibleConfig.entries.length === 0) {
+	if (
+		!Array.isArray(possibleConfig.entries) ||
+		possibleConfig.entries.length === 0
+	) {
 		throw new Error('No entries found');
 	}
 
-	const configFolder = path.dirname(configPath);
+	const configFolder = configPath ? path.dirname(configPath) : process.cwd();
 	possibleConfig.entries.forEach((entry: ConfigEntryPoint) => {
 		entry.filePath = getAbsolutePath(entry.filePath, configFolder);
 		if (entry.outFile !== undefined) {
@@ -48,11 +45,54 @@ export function loadConfigFile(configPath: string): BundlerConfig {
 		}
 	});
 
-	if (possibleConfig.compilationOptions !== undefined && possibleConfig.compilationOptions.preferredConfigPath !== undefined) {
-		possibleConfig.compilationOptions.preferredConfigPath = getAbsolutePath(possibleConfig.compilationOptions.preferredConfigPath, configFolder);
+	if (
+		possibleConfig.compilationOptions !== undefined &&
+		possibleConfig.compilationOptions.preferredConfigPath !== undefined
+	) {
+		possibleConfig.compilationOptions.preferredConfigPath = getAbsolutePath(
+			possibleConfig.compilationOptions.preferredConfigPath,
+			configFolder
+		);
 	}
 
 	return possibleConfig;
+}
+
+/**
+ * @internal Do not output this function in generated dts for the npm package
+ */
+export function loadConfigFile(configPath: string): BundlerConfig {
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const possibleConfig = require(getAbsolutePath(configPath));
+	return validateConfig(possibleConfig, configPath);
+}
+
+export async function tryReadingConfigFromStdIn(): Promise<BundlerConfig | undefined> {
+	if (process.stdin.isTTY) {
+		return;
+	}
+	verboseLog(`Trying to load config from stdin...`);
+	return new Promise<BundlerConfig | undefined>((res, rej) => {
+		const buffer: string[] = [];
+		process.stdin.setEncoding('utf-8');
+		process.stdin.on('data', (data: string) => {
+			buffer.push(data);
+		});
+		process.stdin.on('error', (err: unknown) => {
+			rej(err);
+		});
+		process.stdin.on('end', () => {
+			const text = buffer.join('');
+			if (!text) {
+				res(undefined);
+			}
+			try {
+				res(validateConfig(JSON.parse(text)));
+			} catch (err) {
+				rej(err);
+			}
+		});
+	});
 }
 
 const configScheme: SchemeDescriptor<BundlerConfig> = {
