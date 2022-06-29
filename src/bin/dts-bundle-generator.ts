@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import * as yargs from 'yargs';
 
-import { loadConfigFile, BundlerConfig, ConfigEntryPoint } from '../config-file/load-config-file';
+import { loadConfigFile, BundlerConfig, ConfigEntryPoint, tryReadingConfigFromStdIn } from '../config-file/load-config-file';
 
 import { generateDtsBundle } from '../bundle-generator';
 import { checkProgramDiagnosticsErrors } from '../helpers/check-diagnostics-errors';
@@ -176,7 +176,7 @@ function generateOutFileName(inputFilePath: string): string {
 }
 
 // eslint-disable-next-line complexity
-function main(): void {
+function main(stdinConfig?: BundlerConfig): void {
 	const args = parseArgs();
 
 	if (args.silent && args.verbose) {
@@ -189,7 +189,9 @@ function main(): void {
 
 	let bundlerConfig: BundlerConfig;
 
-	if (args.config !== undefined) {
+	if (stdinConfig) {
+		bundlerConfig = stdinConfig;
+	} else if (args.config !== undefined) {
 		verboseLog(`Trying to load config from ${args.config} file...`);
 		bundlerConfig = loadConfigFile(args.config);
 	} else {
@@ -265,11 +267,21 @@ function main(): void {
 	checkProgramDiagnosticsErrors(program);
 }
 
-try {
-	const executionTime = measureTime(main);
-	normalLog(`Done in ${(executionTime / 1000).toFixed(2)}s`);
-} catch (ex) {
-	normalLog('');
-	errorLog(`Error: ${(ex as Error).message}`);
-	process.exit(1);
-}
+tryReadingConfigFromStdIn()
+	.then(config => {
+		try {
+			const executionTime = measureTime(() => {
+				main(config);
+			});
+			normalLog(`Done in ${(executionTime / 1000).toFixed(2)}s`);
+		} catch (ex) {
+			normalLog('');
+			errorLog(`Error: ${(ex as Error).message}`);
+			process.exit(1);
+		}
+	})
+	.catch(err => {
+		normalLog('');
+		errorLog(`Error: ${(err as Error).message}`);
+		process.exit(1);
+	});
