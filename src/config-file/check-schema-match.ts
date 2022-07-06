@@ -1,4 +1,6 @@
 export interface PrimitiveValues {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
+	anyObject: any;
 	boolean: false;
 	requiredBoolean: true;
 	string: '';
@@ -10,6 +12,9 @@ export type SchemeDescriptor<T> = {
 };
 
 export const schemaPrimitiveValues: Readonly<PrimitiveValues> = {
+	// TODO: more elegant solution? this was not important ...
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
+	anyObject: {} as any,
 	boolean: false,
 	requiredBoolean: true,
 	string: '',
@@ -32,6 +37,9 @@ export function checkSchemaMatch<T>(value: unknown, schema: SchemeDescriptor<T>,
 
 // eslint-disable-next-line complexity
 function checkSchemaMatchRecursively<T>(value: unknown, schema: SchemeDescriptor<T> | [SchemeDescriptor<T>], prefix: string, errors: string[]): value is T {
+	if ((!value || typeof value === 'object') && schema === schemaPrimitiveValues.anyObject) {
+		return true;
+	}
 	if (typeof schema === 'boolean' || typeof schema === 'string') {
 		const schemeType = typeof schema;
 		if (value === undefined && schemaRequiredValues.has(schema)) {

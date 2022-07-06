@@ -37,6 +37,11 @@ import {
 	verboseLog,
 	warnLog,
 } from './logger';
+import { BundlerConfig } from './config-file/load-config-file';
+import { getCompilerOptions } from './get-compiler-options';
+import { checkProgramDiagnosticsErrors } from './helpers/check-diagnostics-errors';
+
+export { enableVerbose, enableNormalLog } from './logger';
 
 export interface CompilationOptions {
 	/**
@@ -51,6 +56,13 @@ export interface CompilationOptions {
 	 * Path to the tsconfig file that will be used for the compilation.
 	 */
 	preferredConfigPath?: string;
+
+	/**
+	 * Extra TypeScript compiler options to override default options
+	 * loaded from the default tsconfig.json specified in `preferredConfigPath`
+	 * or as found in the root of your project by TypeScript compiler.
+	 */
+	compilerOptions?: ts.CompilerOptions;
 }
 
 export interface OutputOptions {
@@ -132,10 +144,57 @@ export interface EntryPointConfig {
 	output?: OutputOptions;
 }
 
+function generateOutFileName(inputFilePath: string): string {
+	const inputFileName = path.parse(inputFilePath).name;
+	return fixPath(path.join(inputFilePath, '..', inputFileName + '.d.ts'));
+}
+
+export function generateAndSaveDtsBundle(bundlerConfig: BundlerConfig) {
+	const generatedDts = generateDtsBundle(bundlerConfig.entries, bundlerConfig.compilationOptions);
+
+	const outFilesToCheck: string[] = [];
+	for (let i = 0; i < bundlerConfig.entries.length; ++i) {
+		const entry = bundlerConfig.entries[i];
+		const outFile = entry.outFile !== undefined ? entry.outFile : generateOutFileName(entry.filePath);
+
+		normalLog(`Writing ${entry.filePath} -> ${outFile}`);
+		ts.sys.writeFile(outFile, generatedDts[i]);
+
+		if (!entry.noCheck) {
+			outFilesToCheck.push(outFile);
+		}
+	}
+
+	if (outFilesToCheck.length === 0) {
+		normalLog('File checking is skipped (due nothing to check)');
+		return;
+	}
+
+	normalLog('Checking generated files...');
+	const preferredConfigPath = bundlerConfig.compilationOptions !== undefined ? bundlerConfig.compilationOptions.preferredConfigPath : undefined;
+	const compilerOptions = getCompilerOptions({
+		inputFileNames: outFilesToCheck,
+		preferredConfigPath,
+		compilerOptions: bundlerConfig.compilationOptions?.compilerOptions,
+	});
+	if (compilerOptions.skipLibCheck) {
+		compilerOptions.skipLibCheck = false;
+		warnLog('Compiler option "skipLibCheck" is disabled to properly check generated output');
+	}
+
+	const program = ts.createProgram(outFilesToCheck, compilerOptions);
+	checkProgramDiagnosticsErrors(program);
+}
+
 export function generateDtsBundle(entries: readonly EntryPointConfig[], options: CompilationOptions = {}): string[] {
 	normalLog('Compiling input files...');
 
-	const { program, rootFilesRemapping } = compileDts(entries.map((entry: EntryPointConfig) => entry.filePath), options.preferredConfigPath, options.followSymlinks);
+	const { program, rootFilesRemapping } = compileDts({
+		inputFileNames: entries.map((entry: EntryPointConfig) => entry.filePath),
+		preferredConfigPath: options.preferredConfigPath,
+		compilerOptions: options.compilerOptions,
+		followSymlinks: options.followSymlinks,
+	});
 	const typeChecker = program.getTypeChecker();
 
 	const typeRoots = ts.getEffectiveTypeRoots(program.getCompilerOptions(), {});

@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 
 import { verboseLog, warnLog } from './logger';
 
-import { getCompilerOptions } from './get-compiler-options';
+import { getCompilerOptions, GetCompilerOptionsOpts } from './get-compiler-options';
 import { getAbsolutePath } from './helpers/get-absolute-path';
 import { checkProgramDiagnosticsErrors, checkDiagnosticsErrors } from './helpers/check-diagnostics-errors';
 
@@ -30,8 +30,14 @@ const declarationExtsRemapping: Record<string, ts.Extension> = {
 	[ts.Extension.Dcts]: ts.Extension.Dcts,
 } satisfies Record<ts.Extension, ts.Extension>;
 
-export function compileDts(rootFiles: readonly string[], preferredConfigPath?: string, followSymlinks: boolean = true): CompileDtsResult {
-	const compilerOptions = getCompilerOptions(rootFiles, preferredConfigPath);
+export interface CompileDtsOpts extends GetCompilerOptionsOpts {
+	followSymlinks?: boolean;
+}
+
+export function compileDts(opts: CompileDtsOpts): CompileDtsResult {
+	const rootFiles = opts.inputFileNames;
+	const followSymlinks = opts.followSymlinks ?? true;
+	const compilerOptions = getCompilerOptions(opts);
 
 	// currently we don't support these compiler options
 	// and removing them shouldn't affect generated code

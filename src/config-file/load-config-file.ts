@@ -59,6 +59,8 @@ const configScheme: SchemeDescriptor<BundlerConfig> = {
 	compilationOptions: {
 		followSymlinks: schemaPrimitiveValues.boolean,
 		preferredConfigPath: schemaPrimitiveValues.string,
+		// this is validated by getCompilerOptions
+		compilerOptions: schemaPrimitiveValues.anyObject,
 	},
 	entries: [
 		{
