@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 
-import * as path from 'path';
-import * as ts from 'typescript';
 import * as yargs from 'yargs';
 
 import { loadConfigFile, BundlerConfig, ConfigEntryPoint } from '../config-file/load-config-file';
 
-import { generateDtsBundle } from '../bundle-generator';
-import { checkProgramDiagnosticsErrors } from '../helpers/check-diagnostics-errors';
-import { getCompilerOptions } from '../get-compiler-options';
-import { fixPath } from '../helpers/fix-path';
+import { generateAndSaveDtsBundle } from '../bundle-generator';
 import { measureTime } from '../helpers/measure-time';
 
 import {
@@ -18,7 +13,6 @@ import {
 	errorLog,
 	normalLog,
 	verboseLog,
-	warnLog,
 } from '../logger';
 
 function toStringsArray(data: unknown): string[] | undefined {
@@ -170,11 +164,6 @@ function parseArgs(): ParsedArgs {
 		.argv as ParsedArgs;
 }
 
-function generateOutFileName(inputFilePath: string): string {
-	const inputFileName = path.parse(inputFilePath).name;
-	return fixPath(path.join(inputFilePath, '..', inputFileName + '.d.ts'));
-}
-
 // eslint-disable-next-line complexity
 function main(): void {
 	const args = parseArgs();
@@ -233,51 +222,7 @@ function main(): void {
 
 	verboseLog(`Total entries count=${bundlerConfig.entries.length}`);
 
-	const generatedDts = generateDtsBundle(bundlerConfig.entries, bundlerConfig.compilationOptions);
-
-	const outFilesToCheck: string[] = [];
-	for (let i = 0; i < bundlerConfig.entries.length; ++i) {
-		const entry = bundlerConfig.entries[i];
-		const outFile = entry.outFile !== undefined ? entry.outFile : generateOutFileName(entry.filePath);
-
-		normalLog(`Writing ${entry.filePath} -> ${outFile}`);
-		ts.sys.writeFile(outFile, generatedDts[i]);
-
-		if (!entry.noCheck) {
-			outFilesToCheck.push(outFile);
-		}
-	}
-
-	if (outFilesToCheck.length === 0) {
-		normalLog('File checking is skipped (due nothing to check)');
-		return;
-	}
-
-	normalLog('Checking generated files...');
-	const preferredConfigFile = bundlerConfig.compilationOptions !== undefined ? bundlerConfig.compilationOptions.preferredConfigPath : undefined;
-	const compilerOptions = getCompilerOptions(outFilesToCheck, preferredConfigFile);
-	if (compilerOptions.skipLibCheck) {
-		compilerOptions.skipLibCheck = false;
-		warnLog('Compiler option "skipLibCheck" is disabled to properly check generated output');
-	}
-
-	// we want to turn this option on because in this case the compile will generate declaration diagnostics out of the box
-	compilerOptions.declaration = true;
-
-	let checkFailed = false;
-	for (const outputFile of outFilesToCheck) {
-		const program = ts.createProgram([outputFile], compilerOptions);
-
-		try {
-			checkProgramDiagnosticsErrors(program);
-		} catch (e) {
-			checkFailed = true;
-		}
-	}
-
-	if (checkFailed) {
-		throw new Error('Failed to check some of generated bundles, check error messages above');
-	}
+	generateAndSaveDtsBundle(bundlerConfig);
 }
 
 try {

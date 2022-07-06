@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as assert from 'assert';
+import { fileURLToPath } from 'url';
 
-const testCasesDir = path.resolve(__dirname, 'test-cases');
+const testCasesDir = path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'test-cases');
 
 function isDirectory(filePath: string): boolean {
 	return fs.lstatSync(path.resolve(testCasesDir, filePath)).isDirectory();
